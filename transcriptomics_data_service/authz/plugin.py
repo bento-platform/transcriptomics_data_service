@@ -1,9 +1,12 @@
 import importlib.util
-import sys
 
-from fastapi import Depends, Request
+from fastapi import Request
 
-__all__ = ["get_request_authorization"]
+from transcriptomics_data_service.authz.middleware_base import BaseAuthzMiddleware
+from transcriptomics_data_service.config import get_config
+from transcriptomics_data_service.logger import get_logger
+
+__all__ = ["authz_plugin"]
 
 
 def import_module_from_path(path):
@@ -16,8 +19,7 @@ def import_module_from_path(path):
 # TODO find a way to allow plugin writers to specify additional dependencies to be installed
 
 AUTHZ_MODULE_PATH = "/tds/lib/authz.module.py"
-authz_plugin = import_module_from_path(AUTHZ_MODULE_PATH)
+authz_plugin_module = import_module_from_path(AUTHZ_MODULE_PATH)
 
-
-async def get_request_authorization(req: Request):
-    return await authz_plugin.get_current_user_authorization(req)
+# Get the concrete authz middleware from the provided plugin module
+authz_plugin: BaseAuthzMiddleware = authz_plugin_module.authz_middleware

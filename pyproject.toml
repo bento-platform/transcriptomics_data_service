@@ -7,9 +7,9 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10.0"
-fastapi = {extras = ["all"], version = "^0.111.1"}
+fastapi = {extras = ["all"], version = "^0.115.0"}
 pydantic = "^2.6.1"
-bento-lib = {extras = ["fastapi"], version = "^11.11.2"}
+bento-lib = {extras = ["fastapi"], version = "^12.2.2"}
 jsonschema = "^4.21.1"
 pydantic-settings = "^2.1.0"
 asyncpg = "^0.29.0"
