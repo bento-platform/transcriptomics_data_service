@@ -81,18 +81,3 @@ def _load_csv(file_bytes: bytes, logger: Logger) -> pd.DataFrame:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error parsing CSV: {e}")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Value error in CSV data: {e}")
-
-
-@ingest_router.post("/normalize/{experiment_result_id}")
-async def normalize(
-    db: DatabaseDependency,
-    experiment_result_id: str,
-    features_lengths_file: UploadFile = File(...),
-    status_code=status.HTTP_200_OK,
-):
-    features_lengths = json.load(features_lengths_file.file)
-    # TODO validate shape
-    # TODO validate experiment_result_id exists
-    # TODO algorithm selection argument?
-    # TODO perform the normalization in a transaction
-    return

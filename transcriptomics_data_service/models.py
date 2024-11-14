@@ -19,3 +19,4 @@ class GeneExpression(BaseModel):
     raw_count: int
     tpm_count: float | None = None
     tmm_count: float | None = None
+    getmm_count: float | None = None

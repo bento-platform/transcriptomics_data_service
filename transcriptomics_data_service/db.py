@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated, AsyncIterator
+from typing import Annotated, AsyncIterator, List, Tuple
 import asyncpg
 from bento_lib.db.pg_async import PgAsyncDatabase
 from contextlib import asynccontextmanager
@@ -83,26 +83,28 @@ class Database(PgAsyncDatabase):
         Rows on gene_expressions can only be created as part of an RCM ingestion.
         Ingestion is all-or-nothing, hence the transaction.
         """
-        async with transaction_conn.transaction():
-            # sub-transaction
-            for gene_expression in expressions:
-                await self._create_gene_expression(gene_expression, transaction_conn)
+        # Prepare data for bulk insertion
+        records = [
+            (
+                expr.gene_code,
+                expr.sample_id,
+                expr.experiment_result_id,
+                expr.raw_count,
+                expr.tpm_count,
+                expr.tmm_count,
+                expr.getmm_count,
+            )
+            for expr in expressions
+        ]
 
-    async def _create_gene_expression(self, expression: GeneExpression, transaction_conn: asyncpg.Connection):
-        # Creates a row on gene_expressions within a transaction.
         query = """
-        INSERT INTO gene_expressions (gene_code, sample_id, experiment_result_id, raw_count, tpm_count, tmm_count)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO gene_expressions (
+            gene_code, sample_id, experiment_result_id, raw_count, tpm_count, tmm_count, getmm_count
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         """
-        await transaction_conn.execute(
-            query,
-            expression.gene_code,
-            expression.sample_id,
-            expression.experiment_result_id,
-            expression.raw_count,
-            expression.tpm_count,
-            expression.tmm_count,
-        )
+
+        await transaction_conn.executemany(query, records)
+        self.logger.info(f"Inserted {len(records)} gene expression records.")
 
     async def fetch_expressions(self) -> tuple[GeneExpression, ...]:
         return tuple([r async for r in self._select_expressions(None)])
@@ -112,7 +114,7 @@ class Database(PgAsyncDatabase):
         where_clause = "WHERE experiment_result_id = $1" if exp_id is not None else ""
         query = f"SELECT * FROM gene_expressions {where_clause}"
         async with self.connect() as conn:
-            res = await conn.fetch(query, *((exp_id) if exp_id is not None else ()))
+            res = await conn.fetch(query, *(exp_id,) if exp_id is not None else ())
         for r in map(lambda g: self._deserialize_gene_expression(g), res):
             yield r
 
@@ -124,7 +126,81 @@ class Database(PgAsyncDatabase):
             raw_count=rec["raw_count"],
             tpm_count=rec["tpm_count"],
             tmm_count=rec["tmm_count"],
+            getmm_count=rec["getmm_count"],
         )
+
+    ############################
+    # CRUD: gene_expression_norm
+    ############################
+
+    async def fetch_gene_expressions_by_experiment_id(self, experiment_result_id: str) -> Tuple[GeneExpression, ...]:
+        """
+        Fetch gene expressions for a specific experiment_result_id.
+        """
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            query = """
+            SELECT * FROM gene_expressions WHERE experiment_result_id = $1
+            """
+            res = await conn.fetch(query, experiment_result_id)
+        return tuple([self._deserialize_gene_expression(record) for record in res])
+
+    async def update_normalized_expressions(self, expressions: List[GeneExpression], method: str):
+        """
+        Update the normalized expressions in the database using batch updates.
+        """
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            async with conn.transaction():
+                if method == "tpm":
+                    column = "tpm_count"
+                elif method == "tmm":
+                    column = "tmm_count"
+                elif method == "getmm":
+                    column = "getmm_count"
+                else:
+                    raise ValueError(f"Unsupported normalization method: {method}")
+
+                # Prepare data for bulk update
+                records = [
+                    (
+                        getattr(expr, column),
+                        expr.experiment_result_id,
+                        expr.gene_code,
+                        expr.sample_id,
+                    )
+                    for expr in expressions
+                ]
+
+                await conn.execute(
+                    f"""
+                    CREATE TEMPORARY TABLE temp_updates (
+                        value DOUBLE PRECISION,
+                        experiment_result_id VARCHAR(255),
+                        gene_code VARCHAR(255),
+                        sample_id VARCHAR(255)
+                    ) ON COMMIT DROP
+                    """
+                )
+
+                await conn.copy_records_to_table(
+                    "temp_updates",
+                    records=records,
+                    columns=["value", "experiment_result_id", "gene_code", "sample_id"],
+                )
+
+                # Update the main table
+                await conn.execute(
+                    f"""
+                    UPDATE gene_expressions
+                    SET {column} = temp_updates.value
+                    FROM temp_updates
+                    WHERE gene_expressions.experiment_result_id = temp_updates.experiment_result_id
+                      AND gene_expressions.gene_code = temp_updates.gene_code
+                      AND gene_expressions.sample_id = temp_updates.sample_id
+                    """
+                )
+        self.logger.info(f"Updated normalized values for method '{method}'.")
 
     @asynccontextmanager
     async def transaction_connection(self):
