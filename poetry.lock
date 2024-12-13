@@ -530,20 +530,6 @@ files = [
 ]
 
 [[package]]
-name = "conorm"
-version = "1.2.0"
-description = "Normalization methods for RNA-seq count data."
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "conorm-1.2.0.tar.gz", hash = "sha256:b4fe4a5d27b9e8c797c4db56f292a80f6e8bca401cbe92a62d9e4688864a986e"},
-]
-
-[package.dependencies]
-numpy = "*"
-pandas = "*"
-
-[[package]]
 name = "coverage"
 version = "7.6.4"
 description = "Code coverage measurement for Python"
@@ -1061,6 +1047,17 @@ MarkupSafe = ">=2.0"
 
 [package.extras]
 i18n = ["Babel (>=2.7)"]
+
+[[package]]
+name = "joblib"
+version = "1.4.2"
+description = "Lightweight pipelining with Python functions"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "joblib-1.4.2-py3-none-any.whl", hash = "sha256:06d478d5674cbc267e7496a410ee875abd68e4340feff4490bcb7afb88060ae6"},
+    {file = "joblib-1.4.2.tar.gz", hash = "sha256:2382c5816b2636fbd20a09e0f4e9dad4736765fdfb7dca582943b9c1366b3f0e"},
+]
 
 [[package]]
 name = "jsonschema"
@@ -2965,4 +2962,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10.0"
-content-hash = "8dcd26f85316220b00d12be77315972eb165cddd78ffb31fb5ce16d2fea05061"
+content-hash = "e657110014e82d15e964ada3e9273d562b968bbfd50e7efcad372322b91fc327"
