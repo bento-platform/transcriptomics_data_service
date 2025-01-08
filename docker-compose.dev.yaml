@@ -9,7 +9,7 @@ services:
     depends_on:
       - tds-db
     environment:
-      - BENTO_UID=1001
+      - BENTO_UID=${UID}
       - DATABASE_URI=postgres://tds_user:tds_password@tds-db:5432/tds_db
       - CORS_ORIGINS="*"
       - BENTO_AUTHZ_SERVICE_URL=""
