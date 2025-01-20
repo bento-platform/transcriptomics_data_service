@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated, AsyncIterator, List, Tuple, Optional
+from typing import Annotated, AsyncIterator, Callable, List, Tuple, Optional
 import asyncpg
 from bento_lib.db.pg_async import PgAsyncDatabase
 from contextlib import asynccontextmanager
@@ -16,9 +16,12 @@ from .models import (
     GeneExpression,
     GeneExpressionData,
     NormalizationMethodEnum,
+    PaginatedRequest,
 )
 
 SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
+
+DEFAULT_PAGINATION: PaginatedRequest = PaginatedRequest(page=1, page_size=100)
 
 
 class Database(PgAsyncDatabase):
@@ -87,6 +90,100 @@ class Database(PgAsyncDatabase):
     async def delete_experiment_result(self, exp_id: str):
         await self._execute(*("DELETE FROM experiment_results WHERE experiment_result_id = $1", exp_id))
         self.logger.info(f"Deleted experiment_result row {exp_id}")
+
+    def _deserialize_experiment_result(self, record: asyncpg.Record) -> ExperimentResult:
+        return ExperimentResult(
+            experiment_result_id=record["experiment_result_id"],
+            assembly_id=record["assembly_id"],
+            assembly_name=record["assembly_name"],
+        )
+
+    ############################
+    # fetch experiment_results
+    ############################
+
+    def _paginated_query(
+        self, base_query: str, base_params: List, pagination: PaginatedRequest | None
+    ) -> Tuple[str, List]:
+        # Ignore if None
+        if pagination is None:
+            return base_query, base_params
+
+        # Parametrize pagination if provided
+        offset = (pagination.page - 1) * pagination.page_size
+
+        # take base query params into account, if provided
+        params = [*base_params]
+        params_count = len(params)
+        params.append(pagination.page_size)
+        params.append(offset)
+        query = f"{base_query.strip()} LIMIT ${params_count + 1} OFFSET ${params_count + 2}"
+        return query, params
+
+    async def fetch_experiment_results(
+        self,
+        pagination: PaginatedRequest | None = DEFAULT_PAGINATION,
+    ) -> Tuple[List[ExperimentResult], int]:
+        base_query = "SELECT * FROM experiment_results ORDER BY experiment_result_id"
+        count_query = "SELECT COUNT(*) FROM experiment_results"
+        async with self.connect() as conn:
+            total_records = await conn.fetchval(count_query)
+            query, params = self._paginated_query(base_query, [], pagination)
+            rows = await conn.fetch(query, *params)
+        items = [self._deserialize_experiment_result(r) for r in rows]
+        return items, total_records
+
+    async def fetch_experiment_samples(
+        self,
+        experiment_result_id: str,
+        pagination: PaginatedRequest | None = DEFAULT_PAGINATION,
+    ) -> Tuple[List[str], int]:
+        """
+        Returns (list_of_sample_ids, total_records) for a single experiment_result_id.
+        """
+        count_query = """
+            SELECT COUNT(DISTINCT sample_id)
+            FROM gene_expressions
+            WHERE experiment_result_id = $1
+        """
+        base_query = """
+            SELECT DISTINCT sample_id
+            FROM gene_expressions
+            WHERE experiment_result_id = $1
+            ORDER BY sample_id
+        """
+        async with self.connect() as conn:
+            total_records = await conn.fetchval(count_query, experiment_result_id)
+            query, params = self._paginated_query(base_query, [experiment_result_id], pagination)
+            rows = await conn.fetch(query, *params)
+        items = [r["sample_id"] for r in rows]
+        return items, total_records
+
+    async def fetch_experiment_features(
+        self, experiment_result_id: str, pagination: PaginatedRequest | None = DEFAULT_PAGINATION
+    ) -> Tuple[List[str], int]:
+        """
+        Returns (list_of_features, total_records) for a single experiment_result_id.
+        """
+        count_query = """
+            SELECT COUNT(DISTINCT gene_code)
+            FROM gene_expressions
+            WHERE experiment_result_id = $1
+        """
+        base_query = """
+            SELECT DISTINCT gene_code
+            FROM gene_expressions
+            WHERE experiment_result_id = $1
+            ORDER BY gene_code
+        """
+
+        async with self.connect() as conn:
+            total_records = await conn.fetchval(count_query, experiment_result_id)
+            query, params = self._paginated_query(base_query, [experiment_result_id], pagination)
+            rows = await conn.fetch(query, *params)
+
+        items = [r["gene_code"] for r in rows]
+        return items, total_records
 
     ########################
     # CRUD: gene_expressions

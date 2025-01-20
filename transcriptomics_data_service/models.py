@@ -9,6 +9,11 @@ __all__ = [
     "GeneExpressionResponse",
     "NormalizationMethodEnum",
     "ExpressionQueryBody",
+    "CountTypesEnum",
+    "PaginatedRequest",
+    "PaginatedResponse",
+    "FeaturesResponse",
+    "SamplesResponse",
 ]
 
 
@@ -32,6 +37,9 @@ class CountTypesEnum(str, Enum):
     getmm = GETMM
 
 
+#####################################
+# PAGINATION MODELS
+#####################################
 class PaginatedRequest(BaseModel):
     page: int = Field(1, ge=1, description="Current page number")
     page_size: int = Field(100, ge=1, le=1000, description="Number of records per page")
@@ -42,12 +50,26 @@ class PaginatedResponse(PaginatedRequest):
     total_pages: int = Field(..., ge=1, description="Total number of pages")
 
 
+#####################################
+# EXPERIMENTS
+#####################################
 class ExperimentResult(BaseModel):
     experiment_result_id: str = Field(..., min_length=1, max_length=255)
     assembly_id: Optional[str] = Field(None, max_length=255)
     assembly_name: Optional[str] = Field(None, max_length=255)
 
 
+class SamplesResponse(PaginatedResponse):
+    samples: List[str]
+
+
+class FeaturesResponse(PaginatedResponse):
+    features: List[str]
+
+
+#####################################
+# GENE EXPRESSIONS
+#####################################
 class GeneExpression(BaseModel):
     gene_code: str = Field(..., min_length=1, max_length=255, description="Feature identifier")
     sample_id: str = Field(..., min_length=1, max_length=255, description="Sample identifier")
